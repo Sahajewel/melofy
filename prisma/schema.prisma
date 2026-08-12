@@ -1,0 +1,250 @@
+// ==============================
+// Prisma Schema — Music Streaming Platform
+// ==============================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==============================
+// ENUMS
+// ==============================
+
+enum Role {
+  USER
+  ARTIST
+  ADMIN
+}
+
+// Song moderation status — production app এ raw upload সরাসরি live করা উচিত না,
+// admin approve করার পর public হবে
+enum SongStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Artist হওয়ার জন্য request/application track করার status
+enum ArtistRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ==============================
+// USER & AUTH
+// ==============================
+
+model User {
+  id        String  @id @default(cuid())
+  email     String  @unique
+  name      String?
+  password  String // bcrypt/argon2 hash — plain text কখনো না
+  role      Role    @default(USER)
+  avatarUrl String?
+
+  // account status — ban/suspend করার জন্য দরকার production এ
+  isActive Boolean @default(true)
+  isBanned Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relations
+  artistProfile ArtistProfile?
+  artistRequest ArtistRequest?
+  playlists     Playlist[]
+  likes         Like[]
+  history       PlayHistory[]
+  refreshTokens RefreshToken[]
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+// Refresh token আলাদা table এ রাখা ভালো practice —
+// এতে token rotation, revoke, multi-device logout সহজে handle করা যায়
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ==============================
+// ARTIST
+// ==============================
+
+// User যখন Artist হতে চায়, তখন এই request তৈরি হয়, admin approve/reject করবে
+model ArtistRequest {
+  id         String              @id @default(cuid())
+  userId     String              @unique
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stageName  String
+  bio        String?
+  reason     String?
+  status     ArtistRequestStatus @default(PENDING)
+  reviewedAt DateTime?
+  createdAt  DateTime            @default(now())
+
+  @@index([status])
+}
+
+model ArtistProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stageName   String
+  bio         String?
+  verified    Boolean @default(false)
+  genre       String?
+  socialLinks Json? // { instagram, youtube, facebook ... }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  songs  Song[]
+  albums Album[]
+
+  @@index([stageName])
+  @@index([verified])
+}
+
+// ==============================
+// MUSIC CONTENT
+// ==============================
+
+model Album {
+  id          String    @id @default(cuid())
+  title       String
+  coverUrl    String?
+  releaseDate DateTime?
+
+  artistId String
+  artist   ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  songs Song[]
+
+  @@index([artistId])
+  @@index([title])
+}
+
+model Song {
+  id       String     @id @default(cuid())
+  title    String
+  duration Int // seconds
+  audioUrl String // S3/Cloudinary presigned URL এর মাধ্যমে upload হবে
+  coverUrl String?
+  genre    String?
+  status   SongStatus @default(PENDING)
+
+  // moderation trail — কেন reject হলো, রাখা ভালো
+  rejectionReason String?
+
+  playCount Int @default(0) // trending/popular sort এর জন্য
+
+  artistId String
+  artist   ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  albumId String?
+  album   Album?  @relation(fields: [albumId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  playlistSongs PlaylistSong[]
+  likes         Like[]
+  history       PlayHistory[]
+
+  // Search ও filter এর জন্য দরকারি indexes
+  @@index([title])
+  @@index([genre])
+  @@index([status])
+  @@index([artistId])
+  @@index([albumId])
+  @@index([createdAt])
+  @@index([playCount])
+}
+
+// ==============================
+// PLAYLIST
+// ==============================
+
+model Playlist {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  coverUrl    String?
+  isPublic    Boolean @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  songs PlaylistSong[]
+
+  @@index([userId])
+  @@index([isPublic])
+}
+
+// Playlist <-> Song many-to-many, সাথে drag-drop reorder এর জন্য `order` field
+model PlaylistSong {
+  id         String @id @default(cuid())
+  playlistId String
+  songId     String
+  order      Int
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  song     Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  addedAt DateTime @default(now())
+
+  @@unique([playlistId, songId]) // একই গান একই playlist এ দুইবার না
+  @@index([playlistId, order]) // reorder query fast করার জন্য
+}
+
+// ==============================
+// ENGAGEMENT
+// ==============================
+
+model Like {
+  id     String @id @default(cuid())
+  userId String
+  songId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, songId])
+  @@index([songId]) // song এর total likes count বের করতে fast লাগবে
+}
+
+model PlayHistory {
+  id       String   @id @default(cuid())
+  userId   String
+  songId   String
+  playedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@index([userId, playedAt]) // "recently played" query fast করার জন্য
+  @@index([songId])
+}
