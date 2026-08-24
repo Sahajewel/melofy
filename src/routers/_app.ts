@@ -1,5 +1,6 @@
 // src/routers/_app.ts
 
+import { authRouter } from "../schemas/auth.router.js";
 import { publicProcedure, router } from "../trpc.js";
 
 // auth.router.ts, song.router.ts ইত্যাদি পরে এখানে import ও merge হবে
@@ -12,7 +13,7 @@ export const appRouter = router({
     return { status: "ok", timestamp: new Date().toISOString() };
   }),
 
-  // auth: authRouter,
+  auth: authRouter,
   // song: songRouter,
 });
 
