@@ -18,8 +18,9 @@ export type JwtPayload = {
 };
 
 // Access token — কম মেয়াদী (15 min), প্রতিটা request এ এটা দিয়ে verify হবে
+
 export function signAccessToken(payload: JwtPayload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "15m" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "1m" });
 }
 
 // Refresh token — বেশি মেয়াদী (7 days), শুধু নতুন access token নেওয়ার জন্য ব্যবহার হবে

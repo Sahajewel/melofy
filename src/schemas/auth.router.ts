@@ -1,8 +1,8 @@
 import bcrypt from "bcrypt";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../trpc";
-import { loginSchema, signupSchema } from "./auth.schema";
-import { signAccessToken, signRefreshToken } from "../utils/jwt";
+import { loginSchema, refreshSchema, signupSchema } from "./auth.schema";
+import { signAccessToken, signRefreshToken, verifyToken } from "../utils/jwt";
 
 const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -152,4 +152,83 @@ export const authRouter = router({
       });
     }
   }),
+
+  // ==============================
+  // REFRESH — নতুন access token নেওয়ার জন্য
+  // ==============================
+
+  refreshToken: publicProcedure
+    .input(refreshSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        let payload: { userId: string; role: "USER" | "ARTIST" | "ADMIN" };
+        try {
+          payload = verifyToken(input.refreshToken) as typeof payload;
+        } catch (error) {
+          if (error instanceof TRPCError) {
+            throw error;
+          }
+          console.error("Refresh Token failed:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "An Unexpected error occured. Please try again later.",
+          });
+        }
+
+        // DB তে token টা আছে কিনা, revoke হয়নি তো, expire হয়নি তো — সব চেক করা হচ্ছে
+        const storedToken = await ctx.db.refreshToken.findUnique({
+          where: { token: input.refreshToken },
+        });
+        if (
+          !storedToken ||
+          storedToken.revoked ||
+          storedToken.expiresAt < new Date()
+        ) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Refresh token expired or revoked",
+          });
+        }
+        // Token rotation: পুরনোটা revoke করে নতুন একটা refresh token ইস্যু করা হচ্ছে
+        // (security best practice — একই refresh token বারবার ব্যবহার হলে leak হলে বোঝা কঠিন হয়)
+        await ctx.db.refreshToken.update({
+          where: { id: storedToken.id },
+          data: {
+            revoked: true,
+          },
+        });
+
+        const decoded = verifyToken(input.refreshToken) as {
+          userId: string;
+          role: string;
+        };
+        const newAccessToken = signAccessToken({
+          userId: decoded.userId,
+          role: decoded.role as "USER" | "ARTIST" | "ADMIN",
+        });
+        const newRefreshToken = signRefreshToken({
+          userId: decoded.userId,
+          role: decoded.role as "USER" | "ARTIST" | "ADMIN",
+        });
+
+        await ctx.db.refreshToken.create({
+          data: {
+            token: newRefreshToken,
+            userId: payload.userId,
+            expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+          },
+        });
+
+        return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        console.error("Refresh Token Error:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Something went wrong while refreshing the token",
+        });
+      }
+    }),
 });
