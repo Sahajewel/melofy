@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../trpc";
 import { loginSchema, refreshSchema, signupSchema } from "./auth.schema";
 import { signAccessToken, signRefreshToken, verifyToken } from "../utils/jwt";
+import { error } from "node:console";
 
 const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -231,4 +232,38 @@ export const authRouter = router({
         });
       }
     }),
+
+  // ==============================
+  // LOGOUT — refresh token revoke করে দেওয়া হচ্ছে
+  // ==============================
+  logout: publicProcedure
+    .input(refreshSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // 1. ডাটাবেসে উক্ত টোকেনটি থাকলে সেটি Revoke করে দেওয়া
+        await ctx.db.refreshToken.updateMany({
+          where: { token: input.refreshToken },
+          data: { revoked: true },
+        });
+
+        return { success: true, message: "Logged out successfully." };
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+
+        // 2. সার্ভার লগে আসল এরর সেভ রাখা
+        console.error("Logout Error:", error);
+
+        // 3. ক্লায়েন্টকে নিরাপদ কাস্টম এরর পাঠানো
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Something went wrong while logging out. Please try again later.",
+        });
+      }
+    }),
+  // ==============================
+  // ME — বর্তমান logged-in user এর তথ্য
+  // ==============================
 });
