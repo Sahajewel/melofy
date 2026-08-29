@@ -1,9 +1,8 @@
 import bcrypt from "bcrypt";
 import { TRPCError } from "@trpc/server";
-import { publicProcedure, router } from "../trpc";
+import { protectedProcedure, publicProcedure, router } from "../trpc";
 import { loginSchema, refreshSchema, signupSchema } from "./auth.schema";
 import { signAccessToken, signRefreshToken, verifyToken } from "../utils/jwt";
-import { error } from "node:console";
 
 const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -266,4 +265,37 @@ export const authRouter = router({
   // ==============================
   // ME — বর্তমান logged-in user এর তথ্য
   // ==============================
+
+  me: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.user?.userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          avatarUrl: true,
+          createdAt: true,
+        },
+      });
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found",
+        });
+      }
+      return user;
+    } catch (error) {
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+      console.error("Get User error:", error);
+
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Something went wrong. Please try again later",
+      });
+    }
+  }),
 });

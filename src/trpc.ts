@@ -19,7 +19,7 @@ const isAuthed = middleware(({ ctx, next }) => {
   if (!ctx.user) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: "Login করা প্রয়োজন",
+      message: "Must be Login",
     });
   }
   return next({
@@ -44,7 +44,7 @@ const isArtist = middleware(({ ctx, next }) => {
   if (ctx.user.role !== "ARTIST" && ctx.user.role !== "ADMIN") {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "শুধু Artist রা এই কাজ করতে পারবে",
+      message: "Only artist can do this",
     });
   }
   return next({
@@ -63,13 +63,13 @@ const isAdmin = middleware(({ ctx, next }) => {
   if (!ctx.user) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: "Login করা প্রয়োজন",
+      message: "Must be Login",
     });
   }
   if (ctx.user.role !== "ADMIN") {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "শুধু Admin এই কাজ করতে পারবে",
+      message: "Only Admin can do this",
     });
   }
   return next({
