@@ -1,6 +1,7 @@
 // src/routers/_app.ts
 
-import { authRouter } from "../schemas/auth.router.js";
+import { artistRequestRouter } from "../features/artistRequest/artistRequest.router.js";
+import { authRouter } from "../features/auth/auth.router.js";
 import { publicProcedure, router } from "../trpc.js";
 
 // auth.router.ts, song.router.ts ইত্যাদি পরে এখানে import ও merge হবে
@@ -14,6 +15,7 @@ export const appRouter = router({
   }),
 
   auth: authRouter,
+  artistRequest: artistRequestRouter,
   // song: songRouter,
 });
 

@@ -1,8 +1,12 @@
 import bcrypt from "bcrypt";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, publicProcedure, router } from "../trpc";
+import { protectedProcedure, publicProcedure, router } from "../../trpc";
 import { loginSchema, refreshSchema, signupSchema } from "./auth.schema";
-import { signAccessToken, signRefreshToken, verifyToken } from "../utils/jwt";
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyToken,
+} from "../../utils/jwt";
 
 const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -51,6 +55,8 @@ export const authRouter = router({
           },
         });
         return {
+          success: true,
+          message: "Account created successfully.",
           user: {
             id: user.id,
             name: user.name,
@@ -129,6 +135,8 @@ export const authRouter = router({
       });
 
       return {
+        success: true,
+        message: "Logged in successfully.",
         user: {
           id: user.id,
           name: user.name,
@@ -219,7 +227,12 @@ export const authRouter = router({
           },
         });
 
-        return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+        return {
+          success: true,
+          message: "Token Refreshed successfully.",
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+        };
       } catch (error) {
         if (error instanceof TRPCError) {
           throw error;
@@ -285,7 +298,7 @@ export const authRouter = router({
           message: "User not found",
         });
       }
-      return user;
+      return { success: true, message: "User fetch successfully", user };
     } catch (error) {
       if (error instanceof TRPCError) {
         throw error;
