@@ -18,4 +18,8 @@ export const artistRequestSchema = z.object({
     .optional(),
 });
 
+export const artistApprovedSchema = z.object({
+  requestId: z.string(),
+});
 export type ArtistRequestInput = z.infer<typeof artistRequestSchema>;
+export type artistApprovedInput = z.infer<typeof artistApprovedSchema>;
