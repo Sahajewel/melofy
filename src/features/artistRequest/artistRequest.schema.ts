@@ -21,5 +21,9 @@ export const artistRequestSchema = z.object({
 export const artistApprovedSchema = z.object({
   requestId: z.string(),
 });
+export const artistRejectedSchema = z.object({
+  requestId: z.string(),
+});
 export type ArtistRequestInput = z.infer<typeof artistRequestSchema>;
 export type artistApprovedInput = z.infer<typeof artistApprovedSchema>;
+export type artistRejetedInput = z.infer<typeof artistRejectedSchema>;

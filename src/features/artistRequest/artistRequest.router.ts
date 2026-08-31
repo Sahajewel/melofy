@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure, protectedProcedure, router } from "../../trpc";
 import {
   artistApprovedSchema,
+  artistRejectedSchema,
   artistRequestSchema,
 } from "./artistRequest.schema";
 
@@ -80,7 +81,7 @@ export const artistRequestRouter = router({
             message: "Artist request not found",
           });
         }
-        if (artistRequest.status === "APPROVED") {
+        if (artistRequest.status !== "PENDING") {
           throw new TRPCError({
             code: "CONFLICT",
             message: "This request is already approved",
@@ -127,6 +128,48 @@ export const artistRequestRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "An unexpected error occured. Please try again later.",
+        });
+      }
+    }),
+  rejectedArtistRequest: adminProcedure
+    .input(artistRejectedSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const artistRequest = await ctx.db.artistRequest.findUnique({
+          where: { id: input.requestId },
+        });
+        if (!artistRequest) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Artist request not found",
+          });
+        }
+        if (artistRequest.status !== "PENDING") {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `Cannot reject a request that is already ${artistRequest.status.toLowerCase()}`,
+          });
+        }
+
+        const result = await ctx.db.artistRequest.update({
+          where: { id: artistRequest.id },
+          data: {
+            status: "REJECTED",
+          },
+        });
+        return {
+          success: true,
+          message: "Artist request successfully rejected",
+          result,
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        console.error("Artist rejected error:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "An unexpected error occured. please try again later",
         });
       }
     }),
